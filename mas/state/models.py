@@ -45,6 +45,15 @@ class SourcePlatform(str, Enum):
     AMAZON = "AMAZON"
 
 
+class OrderStatus(str, Enum):
+    PENDING_FULFILLMENT = "PENDING_FULFILLMENT"
+    ORDERED_ON_ALIEXPRESS = "ORDERED_ON_ALIEXPRESS"
+    SHIPPED = "SHIPPED"
+    DELIVERED = "DELIVERED"
+    REFUNDED = "REFUNDED"
+    DISPUTED = "DISPUTED"
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Domain models
 # ──────────────────────────────────────────────────────────────────────────────
@@ -55,8 +64,10 @@ class DiscoveredProduct(BaseModel):
     title: str
     description: str = ""
     source_url: str = ""
-    engagement_score: float = 0.0  # likes+comments+shares normalised 0-1
+    engagement_score: float = 0.0
     keyword: str = ""
+    competitor_ad_count: int = 0       # from FB Ad Library pre-flight
+    competitor_saturation: str = ""    # LOW / MEDIUM / HIGH / VERY HIGH
     raw_metadata: Dict[str, Any] = Field(default_factory=dict)
     discovered_at: datetime = Field(default_factory=_now)
 
@@ -74,6 +85,7 @@ class SupplierProduct(BaseModel):
     image_urls: List[str] = Field(default_factory=list)
     supplier_name: str = ""
     validated_at: datetime = Field(default_factory=_now)
+    last_price_check_at: Optional[datetime] = None  # track price drift
 
     @property
     def suggested_retail_price(self) -> float:
@@ -99,6 +111,7 @@ class LandingPage(BaseModel):
     product_id: str
     html: str
     lander_url: str = ""
+    stripe_payment_link: str = ""      # Stripe Payment Link URL
     generated_at: datetime = Field(default_factory=_now)
 
 
@@ -111,6 +124,7 @@ class GeneratedContent(BaseModel):
 
 class CampaignResult(BaseModel):
     product_id: str
+    platform: str = "META"             # META or TIKTOK
     meta_campaign_id: str = ""
     meta_adset_id: str = ""
     meta_ad_ids: List[str] = Field(default_factory=list)
@@ -128,15 +142,45 @@ class PerformanceMetrics(BaseModel):
     clicks: int = 0
     purchases: int = 0
     revenue_usd: float = 0.0
+    refunds_usd: float = 0.0          # net of refunds
+    stripe_fees_usd: float = 0.0      # 2.9% + $0.30 per transaction
+    cogs_usd: float = 0.0             # AliExpress cost × units sold
     roas: float = 0.0
+    net_profit_usd: float = 0.0       # revenue - spend - cogs - stripe_fees - refunds
     ctr: float = 0.0
     cpc_usd: float = 0.0
     recorded_at: datetime = Field(default_factory=_now)
 
     def compute(self) -> None:
-        self.roas = round(self.revenue_usd / self.spend_usd, 2) if self.spend_usd else 0.0
+        net_revenue = self.revenue_usd - self.refunds_usd
+        self.roas = round(net_revenue / self.spend_usd, 2) if self.spend_usd else 0.0
+        self.net_profit_usd = round(
+            net_revenue - self.spend_usd - self.cogs_usd - self.stripe_fees_usd, 2
+        )
         self.ctr = round(self.clicks / self.impressions * 100, 2) if self.impressions else 0.0
         self.cpc_usd = round(self.spend_usd / self.clicks, 2) if self.clicks else 0.0
+
+    @staticmethod
+    def stripe_fee(revenue: float, purchases: int) -> float:
+        return round(revenue * 0.029 + purchases * 0.30, 2)
+
+
+class CustomerOrder(BaseModel):
+    """Tracks a customer purchase through to fulfilment."""
+    id: str = Field(default_factory=_uid)
+    pipeline_id: str
+    stripe_session_id: str = ""
+    stripe_payment_intent: str = ""
+    customer_email: str = ""
+    customer_name: str = ""
+    amount_usd: float = 0.0
+    aliexpress_order_id: str = ""      # filled when manually placed on AliExpress
+    tracking_number: str = ""
+    carrier: str = ""
+    status: OrderStatus = OrderStatus.PENDING_FULFILLMENT
+    notes: str = ""
+    created_at: datetime = Field(default_factory=_now)
+    updated_at: datetime = Field(default_factory=_now)
 
 
 class ProductPipeline(BaseModel):
@@ -147,7 +191,10 @@ class ProductPipeline(BaseModel):
     supplier: Optional[SupplierProduct] = None
     content: Optional[GeneratedContent] = None
     campaign: Optional[CampaignResult] = None
+    tiktok_campaign: Optional[CampaignResult] = None   # parallel TikTok campaign
     metrics: List[PerformanceMetrics] = Field(default_factory=list)
+    orders: List[CustomerOrder] = Field(default_factory=list)
+    competitor_research: Dict[str, Any] = Field(default_factory=dict)
     failure_reason: str = ""
     failure_count: int = 0
     created_at: datetime = Field(default_factory=_now)
@@ -167,6 +214,18 @@ class ProductPipeline(BaseModel):
     @property
     def latest_metrics(self) -> Optional[PerformanceMetrics]:
         return self.metrics[-1] if self.metrics else None
+
+    @property
+    def total_orders(self) -> int:
+        return len(self.orders)
+
+    @property
+    def total_revenue_usd(self) -> float:
+        return sum(o.amount_usd for o in self.orders)
+
+    @property
+    def net_profit_usd(self) -> float:
+        return self.latest_metrics.net_profit_usd if self.latest_metrics else 0.0
 
 
 # ──────────────────────────────────────────────────────────────────────────────

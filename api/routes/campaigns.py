@@ -73,8 +73,9 @@ async def approve_campaign(
     x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
     store: StateStore = Depends(get_store),
 ):
+    import secrets
     cfg = get_settings()
-    if x_admin_secret != cfg.admin_secret:
+    if not secrets.compare_digest(x_admin_secret, cfg.admin_secret):
         raise HTTPException(403, "Invalid admin secret")
 
     pipeline = await store.get_pipeline(pipeline_id)

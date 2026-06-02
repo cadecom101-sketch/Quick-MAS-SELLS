@@ -1,14 +1,15 @@
 """MAS Orchestrator — coordinates all agents in a deterministic execution loop.
 
 Execution order per cycle:
+  0. GuardrailAgent         — spend cap + early kill (ALWAYS runs first)
   1. TrendSpotterAgent      — discover new products
   2. SupplierIntelAgent     — validate on AliExpress
   3. ContentForgeAgent      — generate landing page + ads
-  4. CampaignDeployAgent    — create + activate Meta campaigns
+  4. CampaignDeployAgent    — create + activate Meta & TikTok campaigns
   5. PerformanceMonitorAgent — track ROI, auto-scale/kill
 
 Fail-closed: if any agent becomes unhealthy (3 consecutive failures), the
-orchestrator skips that agent for the current cycle and emits an alert event.
+orchestrator skips that agent for the current cycle and emails an alert.
 All state transitions are idempotent — re-running a cycle is safe.
 """
 from __future__ import annotations
@@ -19,6 +20,7 @@ from typing import Optional
 
 from mas.agents.campaign_deploy import CampaignDeployAgent
 from mas.agents.content_forge import ContentForgeAgent
+from mas.agents.guardrail import GuardrailAgent
 from mas.agents.performance_monitor import PerformanceMonitorAgent
 from mas.agents.supplier_intel import SupplierIntelAgent
 from mas.agents.trend_spotter import TrendSpotterAgent
@@ -31,6 +33,7 @@ logger = get_logger("Orchestrator")
 class Orchestrator:
     def __init__(self, store: StateStore) -> None:
         self.store = store
+        self.guardrail = GuardrailAgent(store)
         self.trend_spotter = TrendSpotterAgent(store)
         self.supplier_intel = SupplierIntelAgent(store)
         self.content_forge = ContentForgeAgent(store)
@@ -41,6 +44,7 @@ class Orchestrator:
     @property
     def agents(self):
         return [
+            self.guardrail,
             self.trend_spotter,
             self.supplier_intel,
             self.content_forge,
@@ -65,6 +69,16 @@ class Orchestrator:
 
         logger.info("orchestrator_cycle_start", cycle=cycle_id)
         summary = {"cycle": cycle_id, "steps": {}}
+
+        # ── Step 0: Guardrails (always runs — fail-closed) ──────────────────────
+        try:
+            guardrail_result = await self.guardrail.run()
+            summary["steps"]["guardrail"] = guardrail_result
+            if guardrail_result.get("daily_cap", {}).get("breached"):
+                logger.error("orchestrator_daily_cap_breached", msg="Skipping deployment step")
+        except Exception as exc:
+            logger.error("orchestrator_guardrail_failed", error=str(exc))
+            summary["steps"]["guardrail"] = {"error": str(exc), "deployment_blocked": True}
 
         # ── Step 1: Discover ────────────────────────────────────────────────────
         if self.trend_spotter.healthy:
@@ -145,3 +159,46 @@ class Orchestrator:
         """Human-in-the-Loop: approve a pipeline waiting at the HITL gate."""
         pipeline = await self.campaign_deploy.approve_and_deploy(pipeline_id)
         return {"pipeline_id": pipeline.id, "state": pipeline.state.value}
+
+    async def build_dashboard_stats(self) -> dict:
+        """Aggregate P&L across all pipelines (shared by /analytics/dashboard and digest).
+
+        Uses only the latest metrics snapshot per pipeline — ad-platform insights are
+        cumulative-to-date, so summing every snapshot would double-count.
+        """
+        all_pipelines = await self.store.list_pipelines(limit=10_000)
+        by_state: dict = {}
+        spend = revenue = cogs = fees = 0.0
+        purchases = orders = 0
+        performers = []
+
+        for p in all_pipelines:
+            by_state[p.state.value] = by_state.get(p.state.value, 0) + 1
+            orders += len(p.orders)
+            lm = p.latest_metrics
+            if lm:
+                spend += lm.spend_usd
+                revenue += lm.revenue_usd
+                cogs += lm.cogs_usd
+                fees += lm.stripe_fees_usd
+                purchases += lm.purchases
+                if lm.roas > 0:
+                    performers.append({
+                        "title": p.discovered_product.title if p.discovered_product else "?",
+                        "state": p.state.value,
+                        "roas": lm.roas,
+                        "spend": lm.spend_usd,
+                        "net_profit": lm.net_profit_usd,
+                    })
+
+        performers.sort(key=lambda x: x["roas"], reverse=True)
+        return {
+            "by_state": by_state,
+            "total_spend_usd": round(spend, 2),
+            "total_revenue_usd": round(revenue, 2),
+            "net_profit_usd": round(revenue - spend - cogs - fees, 2),
+            "overall_roas": round(revenue / spend, 2) if spend else 0.0,
+            "total_purchases": purchases,
+            "total_orders": orders,
+            "top_performers": performers[:10],
+        }

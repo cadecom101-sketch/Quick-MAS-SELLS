@@ -29,13 +29,16 @@ You specialise in high-converting dropshipping landing pages and Facebook ads ta
 Your output is always valid JSON with the exact structure requested.
 Landing page HTML must be self-contained, mobile-first, load in <2s, and include:
 - A bold hero section with the product image
-- 3 compelling benefit bullets
-- Social proof section (fabricated but realistic UGC-style reviews)
-- Scarcity / urgency element
-- A clear CTA button linking to #checkout
-- Inline CSS only — no external stylesheets
-- Google Fonts via <link> for Inter font
-- Conversion pixel placeholder <!-- PIXEL_PLACEHOLDER --> just before </head>"""
+- 3 compelling benefit bullets (emoji icons, benefit-first language)
+- Social proof section with 3 fabricated but realistic first-name + city UGC reviews
+- Scarcity urgency bar ("Only X left! Order ships today")
+- A CTA button that links to CHECKOUT_URL_PLACEHOLDER (replace this exactly)
+- Inline CSS only — no external stylesheets or CDN CSS files
+- Google Fonts via <link> for Inter font only
+- Meta Pixel base code placeholder <!-- PIXEL_PLACEHOLDER --> just before </head>
+- Stripe Publishable Key placeholder <!-- STRIPE_PK_PLACEHOLDER --> just before </head>
+
+Important: The buy button href must be exactly: CHECKOUT_URL_PLACEHOLDER"""
 
 _USER_TEMPLATE = """Product Details:
 - Title: {title}
@@ -112,8 +115,35 @@ async def generate_content(
 
     data = json.loads(raw)
 
-    # Persist landing page HTML to disk
+    # Inject Stripe checkout link and Meta Pixel
+    from mas.tools.stripe_checkout import create_payment_link
+    lander_url_temp = f"{cfg.public_base_url}/landers/{supplier.product_id}"
+
+    checkout_url = await create_payment_link(
+        supplier=supplier,
+        lander_url=lander_url_temp,
+        pipeline_id=supplier.product_id,
+    ) or supplier.aliexpress_url  # fallback to AliExpress direct if Stripe not set up
+
     html = data["landing_page_html"]
+    html = html.replace("CHECKOUT_URL_PLACEHOLDER", checkout_url)
+
+    # Inject Meta Pixel if configured
+    if cfg.meta_pixel_id:
+        pixel_code = f"""<script>
+!function(f,b,e,v,n,t,s){{if(f.fbq)return;n=f.fbq=function(){{n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)}};
+if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];
+s.parentNode.insertBefore(t,s)}}(window, document,'script',
+'https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', '{cfg.meta_pixel_id}');
+fbq('track', 'PageView');
+</script>"""
+        html = html.replace("<!-- PIXEL_PLACEHOLDER -->", pixel_code)
+
+    # Persist landing page HTML to disk
     lander_path = _LANDERS_DIR / f"{supplier.product_id}.html"
     lander_path.write_text(html, encoding="utf-8")
 

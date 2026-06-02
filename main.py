@@ -145,5 +145,20 @@ def approve(pipeline_id: str = typer.Argument(..., help="Pipeline ID to approve"
     asyncio.run(_run())
 
 
+@app_cli.command()
+def digest():
+    """Email the daily P&L digest to the admin (wire this to a daily cron)."""
+    configure_logging()
+
+    async def _run():
+        orch = await _get_orchestrator()
+        stats = await orch.build_dashboard_stats()
+        from mas.tools.email_alerts import send_daily_digest
+        await send_daily_digest(stats)
+        console.print(f"[green]Digest sent.[/] Net profit: ${stats.get('net_profit_usd', 0):.2f}")
+
+    asyncio.run(_run())
+
+
 if __name__ == "__main__":
     app_cli()

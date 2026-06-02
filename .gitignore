@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# App runtime artifacts
+mas_state.db
+mas_state.db-wal
+mas_state.db-shm
+mas_telemetry.jsonl
+landers/*.html
+
+# Secrets
+.env
+
+# Test / tooling
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
