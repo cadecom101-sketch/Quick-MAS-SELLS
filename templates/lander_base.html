@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="{{ product_title }} — Limited Time Offer">
+<title>{{ product_title }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<!-- PIXEL_PLACEHOLDER -->
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Inter,sans-serif;background:#fff;color:#111;line-height:1.6}
+  .hero{background:linear-gradient(135deg,#1e3a5f 0%,#0f172a 100%);color:#fff;padding:3rem 1.5rem;text-align:center}
+  .hero img{max-width:340px;width:90%;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.4);margin-bottom:2rem}
+  .hero h1{font-size:clamp(1.6rem,4vw,2.4rem);font-weight:800;line-height:1.2;margin-bottom:1rem}
+  .hero .sub{font-size:1.1rem;color:#94a3b8;margin-bottom:1.5rem}
+  .badge{display:inline-block;background:#ef4444;color:#fff;padding:.3rem .9rem;border-radius:999px;font-size:.8rem;font-weight:700;letter-spacing:.03em;margin-bottom:1rem}
+  .cta-btn{display:inline-block;background:#f97316;color:#fff;font-size:1.1rem;font-weight:700;padding:1rem 2.5rem;border-radius:12px;text-decoration:none;margin-top:1rem;box-shadow:0 4px 20px rgba(249,115,22,.4);transition:transform .15s,box-shadow .15s}
+  .cta-btn:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(249,115,22,.5)}
+  .price-block{margin:.75rem 0;font-size:1.2rem}
+  .price-block .original{text-decoration:line-through;color:#94a3b8;font-size:.95rem}
+  .price-block .sale{color:#f97316;font-weight:800;font-size:1.8rem}
+  .benefits{max-width:700px;margin:3rem auto;padding:0 1.5rem}
+  .benefits h2{font-size:1.4rem;font-weight:700;margin-bottom:1.5rem;text-align:center}
+  .benefit{display:flex;gap:1rem;align-items:flex-start;margin-bottom:1.25rem}
+  .benefit .icon{font-size:1.5rem;flex-shrink:0;margin-top:2px}
+  .benefit p{font-size:1rem;color:#374151}
+  .social-proof{background:#f0fdf4;padding:3rem 1.5rem}
+  .social-proof h2{text-align:center;font-size:1.3rem;font-weight:700;margin-bottom:2rem}
+  .reviews{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;max-width:900px;margin:0 auto}
+  .review{background:#fff;border-radius:12px;padding:1.25rem;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+  .review .stars{color:#f59e0b;margin-bottom:.4rem}
+  .review .name{font-weight:600;font-size:.9rem;color:#111;margin-bottom:.3rem}
+  .review p{font-size:.9rem;color:#374151}
+  .urgency{background:#fef2f2;border:2px solid #fca5a5;border-radius:12px;padding:1.25rem 1.5rem;max-width:700px;margin:2rem auto;text-align:center}
+  .urgency strong{color:#dc2626}
+  .checkout-section{max-width:600px;margin:2.5rem auto;padding:0 1.5rem;text-align:center}
+  .checkout-section h2{font-size:1.3rem;margin-bottom:1rem}
+  footer{background:#0f172a;color:#64748b;text-align:center;padding:1.5rem;font-size:.85rem}
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <span class="badge">LIMITED TIME OFFER</span>
+  <img src="{{ product_image }}" alt="{{ product_title }}" loading="lazy">
+  <h1>{{ product_title }}</h1>
+  <p class="sub">Loved by thousands — only {{ stock_left }} left in stock</p>
+  <div class="price-block">
+    <span class="original">${{ original_price }}</span>
+    <span class="sale"> ${{ sale_price }}</span>
+  </div>
+  <a href="#checkout" class="cta-btn">Get Yours — Free Shipping Today!</a>
+</section>
+
+<!-- BENEFITS -->
+<section class="benefits">
+  <h2>Why Everyone's Obsessed</h2>
+  {{ benefits_html }}
+</section>
+
+<!-- SOCIAL PROOF -->
+<section class="social-proof">
+  <h2>⭐ {{ review_count }}+ Happy Customers</h2>
+  <div class="reviews">
+    {{ reviews_html }}
+  </div>
+</section>
+
+<!-- URGENCY -->
+<div class="urgency">
+  <strong>⚡ Selling Fast!</strong> Only <strong>{{ stock_left }}</strong> units left.
+  Order now and get <strong>FREE shipping</strong> — ships within 24 hours!
+</div>
+
+<!-- CHECKOUT -->
+<section class="checkout-section" id="checkout">
+  <h2>Complete Your Order</h2>
+  <a href="{{ aliexpress_url }}" class="cta-btn" target="_blank" rel="noopener">
+    Order Now — ${{ sale_price }} ↗
+  </a>
+  <p style="margin-top:.75rem;color:#6b7280;font-size:.85rem">
+    Secure checkout · 30-day money-back guarantee
+  </p>
+</section>
+
+<footer>
+  <p>© 2026 Quick-MAS-SELLS · <a href="mailto:cad.ecom101@gmail.com" style="color:#94a3b8">Contact</a></p>
+</footer>
+
+</body>
+</html>
