@@ -11,10 +11,11 @@ Get free authtoken at: https://dashboard.ngrok.com/signup
 """
 from __future__ import annotations
 
-import logging
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+from mas.telemetry.logger import get_logger
+
+logger = get_logger(__name__)
 
 _tunnel_url: Optional[str] = None
 
@@ -27,10 +28,7 @@ async def start_tunnel(port: int = 8000) -> Optional[str]:
     cfg = get_settings()
 
     if not cfg.ngrok_configured:
-        logger.info(
-            "ngrok_skipped",
-            msg="NGROK_AUTHTOKEN not set — using PUBLIC_BASE_URL from .env as-is",
-        )
+        logger.info("ngrok_skipped")
         return None
 
     try:

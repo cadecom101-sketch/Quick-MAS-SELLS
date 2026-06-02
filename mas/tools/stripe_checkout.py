@@ -9,13 +9,13 @@ GitHub SDK:  https://github.com/stripe/stripe-python
 """
 from __future__ import annotations
 
-import logging
 from typing import Optional
 
 from config.settings import get_settings
 from mas.state.models import SupplierProduct
+from mas.telemetry.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _stripe():
@@ -43,10 +43,7 @@ async def create_payment_link(
     """
     cfg = get_settings()
     if not cfg.stripe_configured:
-        logger.warning(
-            "stripe_not_configured",
-            msg="Set STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY in .env to enable checkout",
-        )
+        logger.warning("stripe_not_configured")
         return None
 
     stripe = _stripe()

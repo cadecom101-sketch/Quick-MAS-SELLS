@@ -46,8 +46,7 @@ class BaseAgent(ABC):
             self.log.error(
                 "agent_unhealthy_fail_closed",
                 agent=self.name,
-                msg="Agent marked unhealthy after 3 consecutive failures. "
-                    "Human intervention required.",
+                reason="Agent marked unhealthy after 3 consecutive failures. Human intervention required.",
             )
             # Fire-and-forget operator alert — never let the alert path break failure handling
             try:

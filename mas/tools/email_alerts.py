@@ -13,10 +13,11 @@ Setup:      1. Sign up at https://resend.com
 """
 from __future__ import annotations
 
-import logging
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger(__name__)
+from mas.telemetry.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def _resend():
@@ -35,7 +36,7 @@ def _cfg():
 def _send(to: str, subject: str, html: str) -> bool:
     cfg = _cfg()
     if not cfg.resend_api_key:
-        logger.warning("resend_not_configured", msg="Set RESEND_API_KEY in .env to enable emails")
+        logger.warning("resend_not_configured")
         return False
     try:
         resend = _resend()
