@@ -20,6 +20,7 @@ from mas.state.models import (
     ProductPipeline,
 )
 from mas.state.store import StateStore
+from mas.tools.email_alerts import alert_campaign_killed, alert_campaign_scaled
 from mas.tools.meta_ads import fetch_campaign_insights, pause_campaign
 
 
@@ -40,14 +41,21 @@ class PerformanceMonitorAgent(BaseAgent):
             await self.store.upsert_pipeline(pipeline)
             return pipeline
 
+        purchases = raw.get("purchases", 0)
+        revenue = raw.get("revenue", 0.0)
+        cogs = (pipeline.supplier.price_usd * purchases) if pipeline.supplier else 0.0
+        stripe_fees = PerformanceMetrics.stripe_fee(revenue, purchases)
+
         m = PerformanceMetrics(
             product_id=pipeline.id,
             campaign_id=pipeline.campaign.meta_campaign_id,
             spend_usd=raw.get("spend", 0.0),
             impressions=raw.get("impressions", 0),
             clicks=raw.get("clicks", 0),
-            purchases=raw.get("purchases", 0),
-            revenue_usd=raw.get("revenue", 0.0),
+            purchases=purchases,
+            revenue_usd=revenue,
+            cogs_usd=cogs,
+            stripe_fees_usd=stripe_fees,
         )
         m.compute()
         pipeline.metrics.append(m)
@@ -85,7 +93,9 @@ class PerformanceMonitorAgent(BaseAgent):
             )
             await pause_campaign(pipeline.campaign)
             pipeline.transition(PipelineState.KILLED)
+            title = pipeline.discovered_product.title if pipeline.discovered_product else "Unknown"
             await self.emit("campaign_killed", pipeline_id=pipeline.id, roas=m.roas)
+            await alert_campaign_killed(pipeline.id, title, m.roas, m.spend_usd, days_live)
 
         elif m.roas >= 3.0 and pipeline.state != PipelineState.SCALED:
             new_budget = round(pipeline.campaign.daily_budget_usd * cfg.scale_budget_multiplier, 2)
@@ -94,14 +104,22 @@ class PerformanceMonitorAgent(BaseAgent):
                 pipeline_id=pipeline.id,
                 old_budget=pipeline.campaign.daily_budget_usd,
                 new_budget=new_budget,
+                net_profit=m.net_profit_usd,
             )
             pipeline.campaign.daily_budget_usd = new_budget
             pipeline.transition(PipelineState.SCALED)
+            title = pipeline.discovered_product.title if pipeline.discovered_product else "Unknown"
             await self.emit(
                 "campaign_scaled",
                 pipeline_id=pipeline.id,
                 new_budget=new_budget,
                 roas=m.roas,
+            )
+            await alert_campaign_scaled(
+                pipeline.id, title,
+                pipeline.campaign.daily_budget_usd / cfg.scale_budget_multiplier,
+                new_budget,
+                m.roas,
             )
 
         else:

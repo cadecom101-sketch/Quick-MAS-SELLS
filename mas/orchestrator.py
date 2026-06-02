@@ -1,14 +1,15 @@
 """MAS Orchestrator — coordinates all agents in a deterministic execution loop.
 
 Execution order per cycle:
+  0. GuardrailAgent         — spend cap + early kill (ALWAYS runs first)
   1. TrendSpotterAgent      — discover new products
   2. SupplierIntelAgent     — validate on AliExpress
   3. ContentForgeAgent      — generate landing page + ads
-  4. CampaignDeployAgent    — create + activate Meta campaigns
+  4. CampaignDeployAgent    — create + activate Meta & TikTok campaigns
   5. PerformanceMonitorAgent — track ROI, auto-scale/kill
 
 Fail-closed: if any agent becomes unhealthy (3 consecutive failures), the
-orchestrator skips that agent for the current cycle and emits an alert event.
+orchestrator skips that agent for the current cycle and emails an alert.
 All state transitions are idempotent — re-running a cycle is safe.
 """
 from __future__ import annotations
@@ -19,6 +20,7 @@ from typing import Optional
 
 from mas.agents.campaign_deploy import CampaignDeployAgent
 from mas.agents.content_forge import ContentForgeAgent
+from mas.agents.guardrail import GuardrailAgent
 from mas.agents.performance_monitor import PerformanceMonitorAgent
 from mas.agents.supplier_intel import SupplierIntelAgent
 from mas.agents.trend_spotter import TrendSpotterAgent
@@ -31,6 +33,7 @@ logger = get_logger("Orchestrator")
 class Orchestrator:
     def __init__(self, store: StateStore) -> None:
         self.store = store
+        self.guardrail = GuardrailAgent(store)
         self.trend_spotter = TrendSpotterAgent(store)
         self.supplier_intel = SupplierIntelAgent(store)
         self.content_forge = ContentForgeAgent(store)
@@ -41,6 +44,7 @@ class Orchestrator:
     @property
     def agents(self):
         return [
+            self.guardrail,
             self.trend_spotter,
             self.supplier_intel,
             self.content_forge,
@@ -65,6 +69,16 @@ class Orchestrator:
 
         logger.info("orchestrator_cycle_start", cycle=cycle_id)
         summary = {"cycle": cycle_id, "steps": {}}
+
+        # ── Step 0: Guardrails (always runs — fail-closed) ──────────────────────
+        try:
+            guardrail_result = await self.guardrail.run()
+            summary["steps"]["guardrail"] = guardrail_result
+            if guardrail_result.get("daily_cap", {}).get("breached"):
+                logger.error("orchestrator_daily_cap_breached", msg="Skipping deployment step")
+        except Exception as exc:
+            logger.error("orchestrator_guardrail_failed", error=str(exc))
+            summary["steps"]["guardrail"] = {"error": str(exc), "deployment_blocked": True}
 
         # ── Step 1: Discover ────────────────────────────────────────────────────
         if self.trend_spotter.healthy:

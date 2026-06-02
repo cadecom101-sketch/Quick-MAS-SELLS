@@ -54,6 +54,22 @@ class Settings(BaseSettings):
     stripe_publishable_key: str = Field(default="", alias="STRIPE_PUBLISHABLE_KEY")
     stripe_webhook_secret: str = Field(default="", alias="STRIPE_WEBHOOK_SECRET")
 
+    # TikTok Ads
+    tiktok_app_id: str = Field(default="", alias="TIKTOK_APP_ID")
+    tiktok_app_secret: str = Field(default="", alias="TIKTOK_APP_SECRET")
+    tiktok_access_token: str = Field(default="", alias="TIKTOK_ACCESS_TOKEN")
+    tiktok_advertiser_id: str = Field(default="", alias="TIKTOK_ADVERTISER_ID")
+    tiktok_pixel_id: str = Field(default="", alias="TIKTOK_PIXEL_ID")
+
+    # Resend (email alerts)
+    resend_api_key: str = Field(default="", alias="RESEND_API_KEY")
+    resend_from_email: str = Field(default="noreply@quick-mas-sells.com", alias="RESEND_FROM_EMAIL")
+
+    # Spend guardrails
+    max_total_daily_spend_usd: float = Field(default=50.0, alias="MAX_TOTAL_DAILY_SPEND_USD")
+    # Kill campaign if ROAS below this after 6-24 hours
+    early_kill_roas_threshold: float = Field(default=0.3, alias="EARLY_KILL_ROAS_THRESHOLD")
+
     # ngrok (optional — auto-exposes localhost when no domain is set)
     ngrok_authtoken: str = Field(default="", alias="NGROK_AUTHTOKEN")
 
@@ -91,6 +107,14 @@ class Settings(BaseSettings):
     @property
     def stripe_configured(self) -> bool:
         return bool(self.stripe_secret_key and self.stripe_publishable_key)
+
+    @property
+    def tiktok_configured(self) -> bool:
+        return bool(self.tiktok_access_token and self.tiktok_advertiser_id)
+
+    @property
+    def resend_configured(self) -> bool:
+        return bool(self.resend_api_key)
 
     @property
     def ngrok_configured(self) -> bool:

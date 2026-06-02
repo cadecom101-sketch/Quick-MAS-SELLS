@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from api.routes import analytics, campaigns, products
+from api.routes import analytics, campaigns, orders, products
 from config.settings import get_settings
 from mas.orchestrator import Orchestrator
 from mas.state.store import get_store, init_store
@@ -84,6 +84,7 @@ app.mount("/landers", StaticFiles(directory="landers", html=True), name="landers
 app.include_router(products.router)
 app.include_router(campaigns.router)
 app.include_router(analytics.router)
+app.include_router(orders.router)
 
 
 # ── Root ─────────────────────────────────────────────────────────────────────
@@ -173,12 +174,63 @@ async def trigger_cycle(request: Request):
 async def stripe_webhook(request: Request):
     """Stripe sends purchase confirmations here. Configure in Stripe Dashboard."""
     from mas.tools.stripe_checkout import handle_webhook
+    from mas.state.models import CustomerOrder
+    from mas.tools.email_alerts import send_order_confirmation
+
     payload = await request.body()
     sig = request.headers.get("stripe-signature", "")
     event = await handle_webhook(payload, sig)
     if event is None:
         from fastapi import HTTPException
         raise HTTPException(400, "Invalid webhook")
+
+    if event.get("type") == "checkout.session.completed":
+        session = event["data"]["object"]
+        pipeline_id = session.get("metadata", {}).get("pipeline_id", "")
+        customer_details = session.get("customer_details", {})
+        customer_email = customer_details.get("email", "")
+        customer_name = customer_details.get("name", "")
+        amount_usd = session.get("amount_total", 0) / 100
+
+        if pipeline_id:
+            store = get_store()
+            pipeline = await store.get_pipeline(pipeline_id)
+            if pipeline:
+                order = CustomerOrder(
+                    pipeline_id=pipeline_id,
+                    stripe_session_id=session.get("id", ""),
+                    stripe_payment_intent=session.get("payment_intent", ""),
+                    customer_email=customer_email,
+                    customer_name=customer_name,
+                    amount_usd=amount_usd,
+                )
+                pipeline.orders.append(order)
+                await store.upsert_pipeline(pipeline)
+
+                # Send customer confirmation email
+                product_title = (
+                    pipeline.supplier.title if pipeline.supplier
+                    else pipeline.discovered_product.title if pipeline.discovered_product
+                    else "Your Order"
+                )
+                if customer_email:
+                    await send_order_confirmation(
+                        customer_email=customer_email,
+                        customer_name=customer_name,
+                        product_title=product_title,
+                        order_id=order.id,
+                        amount_usd=amount_usd,
+                        pipeline_id=pipeline_id,
+                    )
+
+                logger.info(
+                    "order_recorded",
+                    pipeline_id=pipeline_id,
+                    order_id=order.id,
+                    amount=amount_usd,
+                    customer=customer_email,
+                )
+
     return {"received": True}
 
 
