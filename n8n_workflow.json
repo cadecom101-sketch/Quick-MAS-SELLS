@@ -1,0 +1,103 @@
+{
+  "name": "Quick-MAS-SELLS Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "minutesInterval": 1 }]
+        }
+      },
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.QMS_BASE_URL }}/run-cycle",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Admin-Secret", "value": "={{ $env.QMS_ADMIN_SECRET }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "options": { "timeout": 300000 }
+      },
+      "name": "Trigger MAS Cycle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.QMS_BASE_URL }}/campaigns/awaiting-approval",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Admin-Secret", "value": "={{ $env.QMS_ADMIN_SECRET }}" }
+          ]
+        }
+      },
+      "name": "Check Pending Approvals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "Has Pending?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@quick-mas-sells.com",
+        "toEmail": "cad.ecom101@gmail.com",
+        "subject": "QMS: {{ $json.length }} campaign(s) awaiting your approval",
+        "text": "Log in to approve: {{ $env.QMS_BASE_URL }}/campaigns/awaiting-approval\n\nPipelines:\n{{ $json.map(p => '• ' + p.title + ' — ' + p.lander_url).join('\\n') }}"
+      },
+      "name": "Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.QMS_BASE_URL }}/analytics/dashboard"
+      },
+      "name": "Fetch Dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 400]
+    }
+  ],
+  "connections": {
+    "Every Hour": { "main": [[{ "node": "Trigger MAS Cycle", "type": "main", "index": 0 }]] },
+    "Trigger MAS Cycle": { "main": [[{ "node": "Check Pending Approvals", "type": "main", "index": 0 }]] },
+    "Check Pending Approvals": { "main": [[{ "node": "Has Pending?", "type": "main", "index": 0 }]] },
+    "Has Pending?": {
+      "main": [
+        [{ "node": "Email Alert", "type": "main", "index": 0 }],
+        [{ "node": "Fetch Dashboard", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" },
+  "staticData": null,
+  "tags": [{ "name": "dropshipping" }, { "name": "automation" }]
+}

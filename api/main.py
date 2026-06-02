@@ -30,6 +30,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     store = await init_store(cfg.database_url.replace("sqlite+aiosqlite:///", ""))
     _orchestrator = Orchestrator(store)
 
+    # Start ngrok tunnel if configured (updates PUBLIC_BASE_URL at runtime)
+    from mas.tools.ngrok_tunnel import start_tunnel
+    tunnel_url = await start_tunnel(cfg.app_port)
+    if tunnel_url:
+        # Patch settings so landing page URLs use the public tunnel URL
+        cfg.__dict__["public_base_url"] = tunnel_url
+        logger.info("ngrok_active", public_url=tunnel_url)
+
     logger.info(
         "app_startup",
         host=cfg.app_host,
@@ -37,9 +45,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         hitl=cfg.hitl_enabled,
         meta_configured=cfg.meta_configured,
         anthropic_configured=cfg.anthropic_configured,
+        stripe_configured=cfg.stripe_configured,
         admin_email=cfg.admin_email,
+        public_url=tunnel_url or cfg.public_base_url,
     )
     yield
+    from mas.tools.ngrok_tunnel import stop_tunnel
+    await stop_tunnel()
     await store.close()
     logger.info("app_shutdown")
 
@@ -155,6 +167,38 @@ async def trigger_cycle(request: Request):
 
     summary = await _orchestrator.run_cycle()
     return summary
+
+
+@app.post("/stripe-webhook")
+async def stripe_webhook(request: Request):
+    """Stripe sends purchase confirmations here. Configure in Stripe Dashboard."""
+    from mas.tools.stripe_checkout import handle_webhook
+    payload = await request.body()
+    sig = request.headers.get("stripe-signature", "")
+    event = await handle_webhook(payload, sig)
+    if event is None:
+        from fastapi import HTTPException
+        raise HTTPException(400, "Invalid webhook")
+    return {"received": True}
+
+
+@app.get("/order-success/{pipeline_id}", response_class=HTMLResponse)
+async def order_success(pipeline_id: str):
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Order Confirmed!</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+<style>body{{font-family:Inter,sans-serif;background:#0f172a;color:#f8fafc;display:flex;
+align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:2rem}}
+.box{{max-width:480px}}.icon{{font-size:4rem;margin-bottom:1rem}}
+h1{{font-size:2rem;margin-bottom:.5rem}}p{{color:#94a3b8;margin-bottom:2rem}}
+.btn{{background:#f97316;color:#fff;padding:.8rem 2rem;border-radius:8px;
+text-decoration:none;font-weight:700}}</style></head>
+<body><div class="box"><div class="icon">✅</div>
+<h1>Order Confirmed!</h1>
+<p>You'll receive a confirmation email shortly. Your order ships within 24 hours.</p>
+<a class="btn" href="/">Shop More Deals</a></div></body></html>"""
 
 
 @app.get("/health")

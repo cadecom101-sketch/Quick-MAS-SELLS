@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  qms:
+    build: .
+    container_name: quick-mas-sells
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # Persist SQLite DB and generated landing pages between restarts
+      - ./mas_state.db:/app/mas_state.db
+      - ./landers:/app/landers
+      - ./mas_telemetry.jsonl:/app/mas_telemetry.jsonl
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Optional: run scheduled cycles without needing n8n
+  scheduler:
+    build: .
+    container_name: qms-scheduler
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./mas_state.db:/app/mas_state.db
+      - ./landers:/app/landers
+      - ./mas_telemetry.jsonl:/app/mas_telemetry.jsonl
+    command: python main.py loop --interval 3600
+    depends_on:
+      qms:
+        condition: service_healthy

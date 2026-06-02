@@ -49,6 +49,19 @@ class Settings(BaseSettings):
     admin_email: str = Field(default="cad.ecom101@gmail.com", alias="ADMIN_EMAIL")
     admin_secret: str = Field(default="qms-admin-secret-CHANGE_IN_PROD", alias="ADMIN_SECRET")
 
+    # Stripe
+    stripe_secret_key: str = Field(default="", alias="STRIPE_SECRET_KEY")
+    stripe_publishable_key: str = Field(default="", alias="STRIPE_PUBLISHABLE_KEY")
+    stripe_webhook_secret: str = Field(default="", alias="STRIPE_WEBHOOK_SECRET")
+
+    # ngrok (optional — auto-exposes localhost when no domain is set)
+    ngrok_authtoken: str = Field(default="", alias="NGROK_AUTHTOKEN")
+
+    # Shopify (optional — for order fulfilment tracking)
+    shopify_store_url: str = Field(default="", alias="SHOPIFY_STORE_URL")
+    shopify_api_key: str = Field(default="", alias="SHOPIFY_API_KEY")
+    shopify_api_secret: str = Field(default="", alias="SHOPIFY_API_SECRET")
+
     # Scraping
     max_products_per_run: int = Field(default=10, alias="MAX_PRODUCTS_PER_RUN")
     min_aliexpress_reviews: int = Field(default=500, alias="MIN_ALIEXPRESS_REVIEWS")
@@ -74,6 +87,14 @@ class Settings(BaseSettings):
     @property
     def anthropic_configured(self) -> bool:
         return bool(self.anthropic_api_key)
+
+    @property
+    def stripe_configured(self) -> bool:
+        return bool(self.stripe_secret_key and self.stripe_publishable_key)
+
+    @property
+    def ngrok_configured(self) -> bool:
+        return bool(self.ngrok_authtoken)
 
     @property
     def daily_budget_cents(self) -> int:
