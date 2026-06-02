@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import re
 import json
-import logging
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
@@ -16,8 +15,9 @@ from bs4 import BeautifulSoup
 
 from mas.state.models import DiscoveredProduct, SourcePlatform
 from mas.tools.http_client import fetch, fetch_json, jitter_delay
+from mas.telemetry.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # TikTok's internal search cursor — stateless paging
 _TIKTOK_SEARCH_URL = "https://www.tiktok.com/api/search/general/full/"

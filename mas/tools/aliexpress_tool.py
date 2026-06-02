@@ -5,7 +5,6 @@ with HTML fallback. Validates products against review count and rating threshold
 """
 from __future__ import annotations
 
-import logging
 import re
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
@@ -15,8 +14,9 @@ from bs4 import BeautifulSoup
 from config.settings import get_settings
 from mas.state.models import SupplierProduct
 from mas.tools.http_client import fetch, fetch_json, jitter_delay
+from mas.telemetry.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # AliExpress public search endpoint (no auth needed)
 _AE_SEARCH_URL = "https://www.aliexpress.com/wholesale"

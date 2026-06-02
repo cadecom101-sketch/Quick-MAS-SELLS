@@ -13,7 +13,6 @@ Meta Ad Library API (more data, requires token):
 """
 from __future__ import annotations
 
-import logging
 import re
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
@@ -21,8 +20,9 @@ from urllib.parse import quote
 from bs4 import BeautifulSoup
 
 from mas.tools.http_client import fetch, fetch_json, jitter_delay
+from mas.telemetry.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _AD_LIBRARY_API = "https://graph.facebook.com/v20.0/ads_archive"
 _AD_LIBRARY_HTML = "https://www.facebook.com/ads/library/"

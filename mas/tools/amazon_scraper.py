@@ -5,7 +5,6 @@ categories. No API key required.
 """
 from __future__ import annotations
 
-import logging
 import re
 from typing import List, Optional
 from urllib.parse import urljoin
@@ -14,8 +13,9 @@ from bs4 import BeautifulSoup, Tag
 
 from mas.state.models import DiscoveredProduct, SourcePlatform
 from mas.tools.http_client import fetch, jitter_delay
+from mas.telemetry.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # High-demand categories that align with 18-35 US buyer profile
 _CATEGORIES = [

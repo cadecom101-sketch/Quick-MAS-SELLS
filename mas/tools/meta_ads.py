@@ -12,14 +12,14 @@ Requires: pip install facebook-business
 """
 from __future__ import annotations
 
-import logging
 import time
 from typing import Any, Dict, List, Optional
 
 from config.settings import get_settings
 from mas.state.models import AdCreative, AdStatus, CampaignResult, SupplierProduct
+from mas.telemetry.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _sdk():

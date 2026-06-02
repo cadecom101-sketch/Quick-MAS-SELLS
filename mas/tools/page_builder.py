@@ -8,7 +8,6 @@ to generate:
 from __future__ import annotations
 
 import json
-import logging
 import os
 from pathlib import Path
 from typing import List
@@ -17,8 +16,9 @@ import anthropic
 
 from config.settings import get_settings
 from mas.state.models import AdCreative, GeneratedContent, LandingPage, SupplierProduct
+from mas.telemetry.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _LANDERS_DIR = Path("landers")
 _LANDERS_DIR.mkdir(exist_ok=True)

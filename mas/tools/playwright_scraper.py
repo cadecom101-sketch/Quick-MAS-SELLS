@@ -11,11 +11,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import random
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger(__name__)
+from mas.telemetry.logger import get_logger
+
+logger = get_logger(__name__)
 
 _HEADLESS = True
 _VIEWPORT = {"width": 1280, "height": 800}
