@@ -51,6 +51,17 @@ class ContentForgeAgent(BaseAgent):
                     f"with header X-Admin-Secret: <ADMIN_SECRET> to go live."
                 ),
             )
+            # Email the operator that a campaign is waiting for approval
+            from mas.tools.email_alerts import alert_hitl_pending
+            title = pipeline.discovered_product.title if pipeline.discovered_product else "Unknown"
+            await alert_hitl_pending(
+                pipeline_id=pipeline.id,
+                title=title,
+                lander_url=content.landing_page.lander_url if content.landing_page else "",
+                ad_previews=[
+                    {"headline": c.headline, "body": c.body} for c in content.ad_creatives
+                ],
+            )
             self.log.info(
                 "content_forge_hitl_gate",
                 pipeline_id=pipeline.id,

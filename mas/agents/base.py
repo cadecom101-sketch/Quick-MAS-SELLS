@@ -49,6 +49,18 @@ class BaseAgent(ABC):
                 msg="Agent marked unhealthy after 3 consecutive failures. "
                     "Human intervention required.",
             )
+            # Fire-and-forget operator alert — never let the alert path break failure handling
+            try:
+                import asyncio
+
+                from mas.tools.email_alerts import alert_agent_failure
+
+                loop = asyncio.get_running_loop()
+                loop.create_task(
+                    alert_agent_failure(self.name, str(exc), self._consecutive_failures)
+                )
+            except Exception:
+                pass
 
     # ── Event bus helper ────────────────────────────────────────────────────────
 

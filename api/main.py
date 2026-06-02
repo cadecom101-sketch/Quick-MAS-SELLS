@@ -67,9 +67,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Landing pages are public (GET), but credentialed admin calls must not be
+# wildcard-CORS — browsers reject "*" + credentials anyway. Restrict origins to
+# the configured public base URL; allow_credentials only for that origin.
+_cors_origins = list({get_settings().public_base_url, "http://localhost:8000"})
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -157,10 +161,10 @@ async def root():
 # ── Orchestrator trigger endpoint ─────────────────────────────────────────────
 @app.post("/run-cycle")
 async def trigger_cycle(request: Request):
-    from fastapi import Header
+    import secrets
     cfg = get_settings()
     secret = request.headers.get("X-Admin-Secret", "")
-    if secret != cfg.admin_secret:
+    if not secrets.compare_digest(secret, cfg.admin_secret):
         return JSONResponse({"error": "Unauthorized"}, status_code=403)
 
     if _orchestrator is None:

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import pytest
+import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from mas.state.models import (
@@ -26,7 +27,7 @@ from mas.state.store import StateStore
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def store(tmp_path):
     db_path = str(tmp_path / "test.db")
     s = StateStore(db_path)
@@ -87,16 +88,20 @@ def test_performance_metrics_compute():
     from mas.state.models import PerformanceMetrics
     m = PerformanceMetrics(
         product_id="x",
-        spend_usd=15.0,
+        spend_usd=20.0,
         impressions=10000,
         clicks=200,
         purchases=5,
-        revenue_usd=75.0,
+        revenue_usd=100.0,
+        cogs_usd=25.0,
+        stripe_fees_usd=4.40,
     )
     m.compute()
-    assert m.roas == 5.0
-    assert m.ctr == 2.0
-    assert m.cpc_usd == 0.08
+    assert m.roas == 5.0          # 100 revenue / 20 spend
+    assert m.ctr == 2.0           # 200 clicks / 10000 impressions
+    assert m.cpc_usd == 0.10      # 20 spend / 200 clicks
+    # net = 100 - 20 spend - 25 cogs - 4.40 fees = 50.60
+    assert m.net_profit_usd == 50.60
 
 
 # ── Store tests ──────────────────────────────────────────────────────────────────
@@ -220,7 +225,7 @@ async def test_content_forge_agent(store, sample_discovered, sample_supplier):
         new_callable=AsyncMock,
         return_value=mock_content,
     ):
-        with patch("config.settings.get_settings") as mock_cfg:
+        with patch("mas.agents.content_forge.get_settings") as mock_cfg:
             cfg = MagicMock()
             cfg.hitl_enabled = False
             cfg.anthropic_api_key = "test"
@@ -245,3 +250,69 @@ async def test_orchestrator_cycle(store):
         summary = await orch.run_cycle()
         assert "steps" in summary
         assert summary["steps"]["trend_spotter"]["new_products"] == 0
+        # Guardrail must run as Step 0 of every cycle
+        assert "guardrail" in summary["steps"]
+
+
+# ── New coverage: gaps closed in the audit ──────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_guardrail_preflight_rejects_thin_margin(store, sample_discovered):
+    """Pre-flight must block deployment when gross margin < 40%."""
+    from mas.agents.guardrail import GuardrailAgent
+    # price 80 → retail 280 → margin is high; force thin by setting retail near cost.
+    thin = SupplierProduct(
+        product_id="thin-id",
+        title="Overpriced Gadget",
+        price_usd=80.0,        # 3.5x = 280 retail → margin ~71%, so override below
+    )
+    # Simulate supplier whose retail barely exceeds cost by monkeypatching margin
+    pipeline = ProductPipeline(id="thin-id", discovered_product=sample_discovered, supplier=thin)
+
+    # Thin-margin supplier stub — margin check returns before competitor research,
+    # so no need to mock fb_ad_library here.
+    class ThinSupplier:
+        gross_margin_pct = 12.0
+        price_usd = 80.0
+        suggested_retail_price = 91.0
+
+    pipeline.supplier = ThinSupplier()
+    agent = GuardrailAgent(store)
+    ok, reason = await agent.pre_flight_check(pipeline)
+    assert ok is False
+    assert "Margin too thin" in reason
+
+
+@pytest.mark.asyncio
+async def test_dashboard_net_profit(store, sample_discovered, sample_supplier):
+    """build_dashboard_stats must compute net profit = revenue - spend - cogs - fees."""
+    from mas.state.models import PerformanceMetrics
+    pipeline = ProductPipeline(
+        state=PipelineState.MONITORING,
+        discovered_product=sample_discovered,
+        supplier=sample_supplier,
+    )
+    m = PerformanceMetrics(
+        product_id=pipeline.id, spend_usd=20.0, revenue_usd=100.0,
+        cogs_usd=25.0, stripe_fees_usd=4.40, purchases=5,
+    )
+    m.compute()
+    pipeline.metrics.append(m)
+    await store.upsert_pipeline(pipeline)
+
+    from mas.orchestrator import Orchestrator
+    orch = Orchestrator(store)
+    stats = await orch.build_dashboard_stats()
+    assert stats["net_profit_usd"] == 50.60
+    assert stats["total_revenue_usd"] == 100.0
+
+
+def test_customer_order_and_pipeline_revenue(sample_discovered, sample_supplier):
+    """CustomerOrder records and pipeline revenue aggregation."""
+    from mas.state.models import CustomerOrder, OrderStatus
+    p = ProductPipeline(discovered_product=sample_discovered, supplier=sample_supplier)
+    p.orders.append(CustomerOrder(pipeline_id=p.id, amount_usd=45.99, customer_email="a@b.com"))
+    p.orders.append(CustomerOrder(pipeline_id=p.id, amount_usd=45.99, customer_email="c@d.com"))
+    assert p.total_orders == 2
+    assert round(p.total_revenue_usd, 2) == 91.98
+    assert p.orders[0].status == OrderStatus.PENDING_FULFILLMENT

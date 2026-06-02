@@ -159,3 +159,46 @@ class Orchestrator:
         """Human-in-the-Loop: approve a pipeline waiting at the HITL gate."""
         pipeline = await self.campaign_deploy.approve_and_deploy(pipeline_id)
         return {"pipeline_id": pipeline.id, "state": pipeline.state.value}
+
+    async def build_dashboard_stats(self) -> dict:
+        """Aggregate P&L across all pipelines (shared by /analytics/dashboard and digest).
+
+        Uses only the latest metrics snapshot per pipeline — ad-platform insights are
+        cumulative-to-date, so summing every snapshot would double-count.
+        """
+        all_pipelines = await self.store.list_pipelines(limit=10_000)
+        by_state: dict = {}
+        spend = revenue = cogs = fees = 0.0
+        purchases = orders = 0
+        performers = []
+
+        for p in all_pipelines:
+            by_state[p.state.value] = by_state.get(p.state.value, 0) + 1
+            orders += len(p.orders)
+            lm = p.latest_metrics
+            if lm:
+                spend += lm.spend_usd
+                revenue += lm.revenue_usd
+                cogs += lm.cogs_usd
+                fees += lm.stripe_fees_usd
+                purchases += lm.purchases
+                if lm.roas > 0:
+                    performers.append({
+                        "title": p.discovered_product.title if p.discovered_product else "?",
+                        "state": p.state.value,
+                        "roas": lm.roas,
+                        "spend": lm.spend_usd,
+                        "net_profit": lm.net_profit_usd,
+                    })
+
+        performers.sort(key=lambda x: x["roas"], reverse=True)
+        return {
+            "by_state": by_state,
+            "total_spend_usd": round(spend, 2),
+            "total_revenue_usd": round(revenue, 2),
+            "net_profit_usd": round(revenue - spend - cogs - fees, 2),
+            "overall_roas": round(revenue / spend, 2) if spend else 0.0,
+            "total_purchases": purchases,
+            "total_orders": orders,
+            "top_performers": performers[:10],
+        }

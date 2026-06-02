@@ -35,6 +35,19 @@ class PerformanceMonitorAgent(BaseAgent):
         cfg = get_settings()
         raw = await fetch_campaign_insights(pipeline.campaign)
 
+        # Aggregate TikTok insights too, if a TikTok campaign is attached
+        if pipeline.tiktok_campaign and pipeline.tiktok_campaign.meta_campaign_id:
+            from mas.tools.tiktok_ads import fetch_tiktok_insights
+            tt = await fetch_tiktok_insights(pipeline.tiktok_campaign.meta_campaign_id)
+            if tt:
+                raw = {
+                    "spend": raw.get("spend", 0.0) + tt.get("spend", 0.0),
+                    "impressions": raw.get("impressions", 0) + tt.get("impressions", 0),
+                    "clicks": raw.get("clicks", 0) + tt.get("clicks", 0),
+                    "purchases": raw.get("purchases", 0) + tt.get("purchases", 0),
+                    "revenue": raw.get("revenue", 0.0) + tt.get("revenue", 0.0),
+                }
+
         if not raw:
             self.log.debug("performance_no_data", pipeline_id=pipeline.id)
             pipeline.transition(PipelineState.MONITORING)

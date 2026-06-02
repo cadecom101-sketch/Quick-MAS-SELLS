@@ -16,8 +16,12 @@ class DashboardStats(BaseModel):
     by_state: Dict[str, int]
     total_spend_usd: float
     total_revenue_usd: float
+    total_cogs_usd: float
+    total_stripe_fees_usd: float
+    net_profit_usd: float
     overall_roas: float
     total_purchases: int
+    total_orders: int
     top_performers: List[Dict[str, Any]]
     kill_rate_pct: float
 
@@ -29,30 +33,41 @@ async def dashboard(store: StateStore = Depends(get_store)):
     by_state: Dict[str, int] = {}
     total_spend = 0.0
     total_revenue = 0.0
+    total_cogs = 0.0
+    total_fees = 0.0
     total_purchases = 0
+    total_orders = 0
     performers = []
 
     for p in all_pipelines:
         by_state[p.state.value] = by_state.get(p.state.value, 0) + 1
-        for m in p.metrics:
-            total_spend += m.spend_usd
-            total_revenue += m.revenue_usd
-            total_purchases += m.purchases
+        total_orders += len(p.orders)
+        # Use only the latest metrics snapshot per pipeline — earlier snapshots are
+        # cumulative-to-date from the ad platform, so summing all rows double-counts.
+        lm = p.latest_metrics
+        if lm:
+            total_spend += lm.spend_usd
+            total_revenue += lm.revenue_usd
+            total_cogs += lm.cogs_usd
+            total_fees += lm.stripe_fees_usd
+            total_purchases += lm.purchases
 
-        if p.latest_metrics and p.latest_metrics.roas > 0:
+        if lm and lm.roas > 0:
             performers.append(
                 {
                     "pipeline_id": p.id,
                     "title": p.discovered_product.title if p.discovered_product else "?",
-                    "roas": p.latest_metrics.roas,
-                    "spend": p.latest_metrics.spend_usd,
-                    "purchases": p.latest_metrics.purchases,
+                    "roas": lm.roas,
+                    "spend": lm.spend_usd,
+                    "net_profit": lm.net_profit_usd,
+                    "purchases": lm.purchases,
                     "state": p.state.value,
                 }
             )
 
     performers.sort(key=lambda x: x["roas"], reverse=True)
     overall_roas = round(total_revenue / total_spend, 2) if total_spend else 0.0
+    net_profit = round(total_revenue - total_spend - total_cogs - total_fees, 2)
 
     killed = by_state.get(PipelineState.KILLED.value, 0)
     live_or_past = sum(
@@ -71,8 +86,12 @@ async def dashboard(store: StateStore = Depends(get_store)):
         by_state=by_state,
         total_spend_usd=round(total_spend, 2),
         total_revenue_usd=round(total_revenue, 2),
+        total_cogs_usd=round(total_cogs, 2),
+        total_stripe_fees_usd=round(total_fees, 2),
+        net_profit_usd=net_profit,
         overall_roas=overall_roas,
         total_purchases=total_purchases,
+        total_orders=total_orders,
         top_performers=performers[:10],
         kill_rate_pct=kill_rate,
     )
