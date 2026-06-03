@@ -107,7 +107,14 @@ class Settings(BaseSettings):
 
     @property
     def stripe_configured(self) -> bool:
-        return bool(self.stripe_secret_key and self.stripe_publishable_key)
+        sk = self.stripe_secret_key
+        pk = self.stripe_publishable_key
+        return bool(
+            sk and pk
+            and sk.startswith("sk_")
+            and "local" not in sk and "test_local" not in sk
+            and pk.startswith("pk_")
+        )
 
     @property
     def tiktok_configured(self) -> bool:
