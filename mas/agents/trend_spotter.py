@@ -13,6 +13,7 @@ from mas.agents.base import BaseAgent
 from mas.state.models import DiscoveredProduct, PipelineState, ProductPipeline
 from mas.state.store import StateStore
 from mas.tools.amazon_scraper import discover_amazon_products
+from mas.tools.reddit_scraper import discover_reddit_products
 from mas.tools.tiktok_scraper import discover_tiktok_products
 
 
@@ -27,13 +28,15 @@ class TrendSpotterAgent(BaseAgent):
 
         self.log.info("trend_spotter_start", limit=limit)
 
-        # Run both scrapers concurrently
-        tiktok_products, amazon_products = await asyncio.gather(
+        # Run all scrapers concurrently; Reddit is the reliable fallback when
+        # TikTok/Amazon block direct scraping in cloud environments.
+        tiktok_products, amazon_products, reddit_products = await asyncio.gather(
             discover_tiktok_products(limit // 2 or 5),
             discover_amazon_products(limit // 2 or 5),
+            discover_reddit_products(limit),
         )
 
-        all_products: List[DiscoveredProduct] = tiktok_products + amazon_products
+        all_products: List[DiscoveredProduct] = tiktok_products + amazon_products + reddit_products
 
         # Load existing pipelines to avoid re-processing same products
         existing = await self.store.get_all_pipelines_map()
@@ -71,6 +74,7 @@ class TrendSpotterAgent(BaseAgent):
             new_pipelines=len(new_pipeline_ids),
             tiktok=len(tiktok_products),
             amazon=len(amazon_products),
+            reddit=len(reddit_products),
         )
         return new_pipeline_ids
 
