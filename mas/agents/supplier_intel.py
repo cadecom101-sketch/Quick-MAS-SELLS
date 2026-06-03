@@ -25,9 +25,11 @@ class SupplierIntelAgent(BaseAgent):
         keyword = pipeline.discovered_product.title
         self.log.info("supplier_search_start", pipeline_id=pipeline.id, keyword=keyword)
 
+        metadata = pipeline.discovered_product.raw_metadata or {}
         supplier = await find_supplier(
             product_id=pipeline.id,
             keyword=keyword,
+            metadata=metadata,
         )
 
         if supplier is None:

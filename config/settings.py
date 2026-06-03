@@ -102,7 +102,8 @@ class Settings(BaseSettings):
 
     @property
     def anthropic_configured(self) -> bool:
-        return bool(self.anthropic_api_key)
+        key = self.anthropic_api_key
+        return bool(key and key.startswith("sk-ant-") and "test" not in key)
 
     @property
     def stripe_configured(self) -> bool:
