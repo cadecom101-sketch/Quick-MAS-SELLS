@@ -75,7 +75,7 @@ class Orchestrator:
             guardrail_result = await self.guardrail.run()
             summary["steps"]["guardrail"] = guardrail_result
             if guardrail_result.get("daily_cap", {}).get("breached"):
-                logger.error("orchestrator_daily_cap_breached", msg="Skipping deployment step")
+                logger.error("orchestrator_daily_cap_breached")
         except Exception as exc:
             logger.error("orchestrator_guardrail_failed", error=str(exc))
             summary["steps"]["guardrail"] = {"error": str(exc), "deployment_blocked": True}

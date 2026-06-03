@@ -71,12 +71,7 @@ async def create_campaign(
     result = CampaignResult(product_id=supplier.product_id, daily_budget_usd=cfg.daily_ad_budget_usd)
 
     if not cfg.meta_configured:
-        logger.warning(
-            "meta_not_configured",
-            msg="Meta credentials not set — campaign saved as DRAFT only. "
-                "Set META_APP_ID, META_ACCESS_TOKEN, META_AD_ACCOUNT_ID, META_PAGE_ID in .env",
-            product_id=supplier.product_id,
-        )
+        logger.warning("meta_not_configured", product_id=supplier.product_id)
         result.status = AdStatus.DRAFT
         return result
 

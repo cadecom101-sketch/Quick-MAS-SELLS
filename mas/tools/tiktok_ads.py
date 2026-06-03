@@ -21,14 +21,14 @@ Requirements in .env:
 """
 from __future__ import annotations
 
-import logging
 from typing import Any, Dict, List, Optional
 
 from config.settings import get_settings
 from mas.state.models import AdCreative, AdStatus, CampaignResult, SupplierProduct
 from mas.tools.http_client import fetch_json
+from mas.telemetry.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _TIKTOK_API_BASE = "https://business-api.tiktok.com/open_api/v1.3"
 
@@ -66,10 +66,7 @@ async def create_tiktok_campaign(
     cfg = get_settings()
 
     if not cfg.tiktok_configured:
-        logger.warning(
-            "tiktok_not_configured",
-            msg="Set TIKTOK_APP_ID, TIKTOK_ACCESS_TOKEN, TIKTOK_ADVERTISER_ID in .env",
-        )
+        logger.warning("tiktok_not_configured")
         return None
 
     result = CampaignResult(
